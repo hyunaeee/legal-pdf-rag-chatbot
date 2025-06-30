@@ -9,7 +9,7 @@ from embedding import create_vectorstore
 from chat_model import setup_chat_model, create_rag_chain
 from ui_components import reset_chat, setup_sidebar, display_chat_messages, get_user_input
 def main():
-    st.title("QA Engine 1팀 챗봇")
+    st.title("법조항 분석 RAG 챗봇")
     if "id" not in st.session_state:
         st.session_state.id = uuid.uuid4()
         st.session_state.file_cache = {}
