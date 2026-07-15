@@ -7,7 +7,6 @@ from mcp.server.fastmcp import FastMCP
 
 from app.structured_data import SQLiteContractRepository
 
-
 mcp = FastMCP("enterprise-contract-tools")
 repository = SQLiteContractRepository(
     os.getenv("EPA_STRUCTURED_DATA_PATH", "data/contracts.db")
