@@ -37,6 +37,7 @@ class AgentMetrics:
     structured_data_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    estimated_cost_usd: float = 0.0
 
     def snapshot(self) -> dict[str, float | int]:
         average = self.total_latency_ms / self.requests if self.requests else 0.0
@@ -48,6 +49,7 @@ class AgentMetrics:
             "structured_data_calls": self.structured_data_calls,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "estimated_cost_usd": round(self.estimated_cost_usd, 8),
         }
 
 
@@ -62,6 +64,8 @@ class PolicyAgent:
         contract_repository: SQLiteContractRepository | None = None,
         session_store: SQLiteSessionStore | None = None,
         session_history_limit: int = 6,
+        input_cost_per_million_usd: float = 0.0,
+        output_cost_per_million_usd: float = 0.0,
     ) -> None:
         self.retriever = retriever
         self.retrieval_k = retrieval_k
@@ -69,6 +73,8 @@ class PolicyAgent:
         self.contract_repository = contract_repository
         self.session_store = session_store
         self.session_history_limit = session_history_limit
+        self.input_cost_per_million_usd = input_cost_per_million_usd
+        self.output_cost_per_million_usd = output_cost_per_million_usd
         self.metrics = AgentMetrics()
 
     @staticmethod
@@ -153,6 +159,27 @@ class PolicyAgent:
                 content=answer,
             )
 
+    def _estimate_cost(
+        self,
+        *,
+        input_tokens: int | None,
+        output_tokens: int | None,
+    ) -> float | None:
+        if input_tokens is None and output_tokens is None:
+            return None
+        if (
+            self.input_cost_per_million_usd == 0
+            and self.output_cost_per_million_usd == 0
+        ):
+            return None
+        input_cost = (
+            (input_tokens or 0) * self.input_cost_per_million_usd / 1_000_000
+        )
+        output_cost = (
+            (output_tokens or 0) * self.output_cost_per_million_usd / 1_000_000
+        )
+        return input_cost + output_cost
+
     def answer(
         self,
         *,
@@ -234,6 +261,12 @@ class PolicyAgent:
                 )
             self.metrics.input_tokens += result.input_tokens or 0
             self.metrics.output_tokens += result.output_tokens or 0
+            estimated_cost = self._estimate_cost(
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+            )
+            if estimated_cost is not None:
+                self.metrics.estimated_cost_usd += estimated_cost
             self._persist_turns(
                 tenant_id=tenant_id,
                 session_id=active_session,
@@ -243,6 +276,9 @@ class PolicyAgent:
 
             latency = (time.perf_counter() - started) * 1000
             self.metrics.total_latency_ms += latency
+            tokens_per_second = None
+            if result.output_tokens is not None and latency > 0:
+                tokens_per_second = result.output_tokens / (latency / 1000)
             response_metrics: dict[str, float | int | str | None] = {
                 "latency_ms": round(latency, 2),
                 "retrieval_count": len(sources),
@@ -250,6 +286,14 @@ class PolicyAgent:
                 "history_turn_count": len(history.splitlines()) if history else 0,
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
+                "tokens_per_second": (
+                    round(tokens_per_second, 2)
+                    if tokens_per_second is not None
+                    else None
+                ),
+                "estimated_cost_usd": (
+                    round(estimated_cost, 8) if estimated_cost is not None else None
+                ),
                 "finish_reason": result.finish_reason,
             }
             return ChatResponse(
