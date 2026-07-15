@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     retrieval_k: int = Field(default=5, ge=1, le=20)
     require_tenant_header: bool = True
 
+    retrieval_backend: str = "memory"
+    vector_store_path: str = "data/chroma"
+    embedding_backend: str = "hash"
+    vertex_embedding_model: str = "gemini-embedding-001"
+
     model_backend: str = "local"
     model_temperature: float = Field(default=0.1, ge=0, le=2)
     max_output_tokens: int = Field(default=1024, ge=64, le=8192)
