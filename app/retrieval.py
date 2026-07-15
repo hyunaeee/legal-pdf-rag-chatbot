@@ -5,6 +5,7 @@ import math
 import re
 from dataclasses import dataclass
 from threading import RLock
+from typing import Protocol
 
 
 _TOKEN_RE = re.compile(r"[\w가-힣]+", re.UNICODE)
@@ -21,43 +22,64 @@ class Chunk:
     tokens: frozenset[str]
 
 
+class Retriever(Protocol):
+    def ingest(
+        self,
+        *,
+        tenant_id: str,
+        title: str,
+        text: str,
+        page: int | None = None,
+    ) -> tuple[str, int]: ...
+
+    def search(
+        self,
+        *,
+        tenant_id: str,
+        query: str,
+        k: int,
+    ) -> list[tuple[Chunk, float]]: ...
+
+    def count(self, tenant_id: str | None = None) -> int: ...
+
+
+def tokenize(text: str) -> frozenset[str]:
+    tokens = {token.lower() for token in _TOKEN_RE.findall(text)}
+    for korean_word in _KOREAN_RE.findall(text):
+        for width in (2, 3):
+            tokens.update(
+                korean_word[index : index + width]
+                for index in range(max(0, len(korean_word) - width + 1))
+            )
+    return frozenset(tokens)
+
+
+def chunk_text(
+    text: str,
+    size: int = 900,
+    overlap: int = 120,
+) -> list[str]:
+    normalized = " ".join(text.split())
+    if not normalized:
+        return []
+
+    chunks: list[str] = []
+    start = 0
+    while start < len(normalized):
+        end = min(len(normalized), start + size)
+        chunks.append(normalized[start:end])
+        if end == len(normalized):
+            break
+        start = max(start + 1, end - overlap)
+    return chunks
+
+
 class InMemoryRetriever:
     """Deterministic tenant-aware retrieval for local development and tests."""
 
     def __init__(self) -> None:
         self._chunks: list[Chunk] = []
         self._lock = RLock()
-
-    @staticmethod
-    def _tokenize(text: str) -> frozenset[str]:
-        tokens = {token.lower() for token in _TOKEN_RE.findall(text)}
-        for korean_word in _KOREAN_RE.findall(text):
-            for width in (2, 3):
-                tokens.update(
-                    korean_word[index : index + width]
-                    for index in range(max(0, len(korean_word) - width + 1))
-                )
-        return frozenset(tokens)
-
-    @staticmethod
-    def _chunk_text(
-        text: str,
-        size: int = 900,
-        overlap: int = 120,
-    ) -> list[str]:
-        normalized = " ".join(text.split())
-        if not normalized:
-            return []
-
-        chunks: list[str] = []
-        start = 0
-        while start < len(normalized):
-            end = min(len(normalized), start + size)
-            chunks.append(normalized[start:end])
-            if end == len(normalized):
-                break
-            start = max(start + 1, end - overlap)
-        return chunks
 
     def ingest(
         self,
@@ -76,9 +98,9 @@ class InMemoryRetriever:
                 title=title,
                 page=page,
                 text=chunk,
-                tokens=self._tokenize(chunk),
+                tokens=tokenize(chunk),
             )
-            for chunk in self._chunk_text(text)
+            for chunk in chunk_text(text)
         ]
 
         with self._lock:
@@ -100,7 +122,7 @@ class InMemoryRetriever:
         query: str,
         k: int,
     ) -> list[tuple[Chunk, float]]:
-        query_tokens = self._tokenize(query)
+        query_tokens = tokenize(query)
         if not query_tokens:
             return []
 
