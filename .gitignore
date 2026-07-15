@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime state
+data/chroma/
+data/*.db
+data/*.sqlite*
+
+# Generated reports
+evaluation/report.json
+lint-report.txt
+lint-fixes.patch
+pytest-report.xml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+.terraform.lock.hcl
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
