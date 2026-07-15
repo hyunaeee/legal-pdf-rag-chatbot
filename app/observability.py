@@ -5,7 +5,6 @@ from typing import Any
 
 from app.settings import Settings
 
-
 logger = logging.getLogger(__name__)
 
 
