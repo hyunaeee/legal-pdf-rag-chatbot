@@ -15,6 +15,7 @@ from fastapi import (
 from pypdf import PdfReader
 
 from app.agent import PolicyAgent
+from app.models import create_model_provider
 from app.retrieval import InMemoryRetriever
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, IngestResponse
 from app.settings import Settings, get_settings
@@ -22,11 +23,16 @@ from app.settings import Settings, get_settings
 logger = logging.getLogger(__name__)
 retriever = InMemoryRetriever()
 settings = get_settings()
-agent = PolicyAgent(retriever=retriever, retrieval_k=settings.retrieval_k)
+model_provider = create_model_provider(settings)
+agent = PolicyAgent(
+    retriever=retriever,
+    retrieval_k=settings.retrieval_k,
+    model_provider=model_provider,
+)
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="0.2.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
 
@@ -126,4 +132,5 @@ def metrics() -> dict[str, object]:
     return {
         "agent": agent.metrics.snapshot(),
         "indexed_chunks": retriever.count(),
+        "model_provider": model_provider.name,
     }
