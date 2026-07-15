@@ -19,20 +19,23 @@ from app.models import create_model_provider
 from app.retrieval import InMemoryRetriever
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, IngestResponse
 from app.settings import Settings, get_settings
+from app.structured_data import SQLiteContractRepository
 
 logger = logging.getLogger(__name__)
 retriever = InMemoryRetriever()
 settings = get_settings()
 model_provider = create_model_provider(settings)
+contract_repository = SQLiteContractRepository(settings.structured_data_path)
 agent = PolicyAgent(
     retriever=retriever,
     retrieval_k=settings.retrieval_k,
     model_provider=model_provider,
+    contract_repository=contract_repository,
 )
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
 
@@ -73,7 +76,7 @@ async def ingest_document(
     payload = await file.read()
     if len(payload) > config.max_upload_mb * 1024 * 1024:
         raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Uploaded PDF exceeds the configured limit.",
         )
 
@@ -86,7 +89,7 @@ async def ingest_document(
     except Exception as exc:
         logger.warning("PDF parsing failed", exc_info=exc)
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="The uploaded PDF could not be parsed.",
         ) from exc
 
@@ -106,7 +109,7 @@ async def ingest_document(
 
     if not chunk_count:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="The PDF does not contain extractable text.",
         )
 
