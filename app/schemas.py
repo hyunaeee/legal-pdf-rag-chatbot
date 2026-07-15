@@ -20,9 +20,10 @@ class ChatResponse(BaseModel):
     answer: str
     session_id: str
     route: str
-    sources: list[Source] = []
-    safety_flags: list[str] = []
-    metrics: dict[str, Any] = {}
+    model: str | None = None
+    sources: list[Source] = Field(default_factory=list)
+    safety_flags: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class IngestResponse(BaseModel):
