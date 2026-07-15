@@ -104,15 +104,16 @@ class PolicyAgent:
         *,
         tenant_id: str,
         session_id: str,
-    ) -> str:
+    ) -> tuple[str, int]:
         if self.session_store is None or self.session_history_limit == 0:
-            return ""
+            return "", 0
         turns = self.session_store.recent(
             tenant_id=tenant_id,
             session_id=session_id,
             limit=self.session_history_limit,
         )
-        return "\n".join(f"{turn.role}: {turn.content}" for turn in turns)
+        context = "\n".join(f"{turn.role}: {turn.content}" for turn in turns)
+        return context, len(turns)
 
     def _structured_evidence(
         self,
@@ -208,7 +209,7 @@ class PolicyAgent:
             )
 
         try:
-            history = self._conversation_context(
+            history, history_turn_count = self._conversation_context(
                 tenant_id=tenant_id,
                 session_id=active_session,
             )
@@ -282,7 +283,7 @@ class PolicyAgent:
                 "latency_ms": round(latency, 2),
                 "retrieval_count": len(sources),
                 "structured_record_count": len(structured_evidence),
-                "history_turn_count": len(history.splitlines()) if history else 0,
+                "history_turn_count": history_turn_count,
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
                 "tokens_per_second": (
