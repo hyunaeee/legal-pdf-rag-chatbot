@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     otel_service_name: str = "enterprise-policy-agent"
     otel_exporter_otlp_endpoint: str | None = None
 
-    structured_data_path: str = "data/contracts.db"
+    structured_data_path: str = ":memory:"
 
 
 @lru_cache
