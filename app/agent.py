@@ -9,6 +9,7 @@ from app.models.base import GenerationRequest, ModelProvider
 from app.models.local import LocalExtractiveProvider
 from app.retrieval import InMemoryRetriever
 from app.schemas import ChatResponse, Source
+from app.structured_data import SQLiteContractRepository
 
 
 _INJECTION_PATTERNS = (
@@ -31,6 +32,7 @@ class AgentMetrics:
     failures: int = 0
     total_latency_ms: float = 0
     retrieval_calls: int = 0
+    structured_data_calls: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
 
@@ -41,23 +43,26 @@ class AgentMetrics:
             "failures": self.failures,
             "average_latency_ms": round(average, 2),
             "retrieval_calls": self.retrieval_calls,
+            "structured_data_calls": self.structured_data_calls,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
         }
 
 
 class PolicyAgent:
-    """Coordinator with explicit retrieval, generation, and safety stages."""
+    """Coordinator with explicit retrieval, tool, generation, and safety stages."""
 
     def __init__(
         self,
         retriever: InMemoryRetriever,
         retrieval_k: int = 5,
         model_provider: ModelProvider | None = None,
+        contract_repository: SQLiteContractRepository | None = None,
     ) -> None:
         self.retriever = retriever
         self.retrieval_k = retrieval_k
         self.model_provider = model_provider or LocalExtractiveProvider()
+        self.contract_repository = contract_repository
         self.metrics = AgentMetrics()
 
     @staticmethod
@@ -69,10 +74,12 @@ class PolicyAgent:
     @staticmethod
     def _route(query: str) -> str:
         structured_terms = (
+            "계약",
             "상태",
             "담당",
             "갱신일",
             "승인자",
+            "contract",
             "status",
             "owner",
             "renewal",
@@ -80,6 +87,22 @@ class PolicyAgent:
         if any(term in query.lower() for term in structured_terms):
             return "structured_data_then_retrieval"
         return "policy_retrieval"
+
+    def _structured_evidence(
+        self,
+        *,
+        tenant_id: str,
+        query: str,
+        route: str,
+    ) -> list[str]:
+        if route != "structured_data_then_retrieval" or self.contract_repository is None:
+            return []
+        self.metrics.structured_data_calls += 1
+        records = self.contract_repository.search(
+            tenant_id=tenant_id,
+            query=query,
+        )
+        return [record.as_evidence() for record in records]
 
     def answer(
         self,
@@ -126,10 +149,16 @@ class PolicyAgent:
                 )
                 for chunk, score in matches
             ]
+            structured_evidence = self._structured_evidence(
+                tenant_id=tenant_id,
+                query=query,
+                route=route,
+            )
+            evidence = structured_evidence + [source.excerpt for source in sources]
             result = self.model_provider.generate(
                 GenerationRequest(
                     query=query,
-                    evidence=[source.excerpt for source in sources],
+                    evidence=evidence,
                     system_instruction=_SYSTEM_INSTRUCTION,
                     metadata={"tenant_id": tenant_id, "route": route},
                 )
@@ -142,6 +171,7 @@ class PolicyAgent:
             response_metrics: dict[str, float | int | str | None] = {
                 "latency_ms": round(latency, 2),
                 "retrieval_count": len(sources),
+                "structured_record_count": len(structured_evidence),
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
                 "finish_reason": result.finish_reason,
