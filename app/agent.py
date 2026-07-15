@@ -9,7 +9,9 @@ from app.models.base import GenerationRequest, ModelProvider
 from app.models.local import LocalExtractiveProvider
 from app.retrieval import Retriever
 from app.schemas import ChatResponse, Source
+from app.session_store import SQLiteSessionStore
 from app.structured_data import SQLiteContractRepository
+from app.tracing import traced_span
 
 
 _INJECTION_PATTERNS = (
@@ -50,7 +52,7 @@ class AgentMetrics:
 
 
 class PolicyAgent:
-    """Coordinator with explicit retrieval, tool, generation, and safety stages."""
+    """Coordinator with retrieval, tool, generation, review, and state stages."""
 
     def __init__(
         self,
@@ -58,11 +60,15 @@ class PolicyAgent:
         retrieval_k: int = 5,
         model_provider: ModelProvider | None = None,
         contract_repository: SQLiteContractRepository | None = None,
+        session_store: SQLiteSessionStore | None = None,
+        session_history_limit: int = 6,
     ) -> None:
         self.retriever = retriever
         self.retrieval_k = retrieval_k
         self.model_provider = model_provider or LocalExtractiveProvider()
         self.contract_repository = contract_repository
+        self.session_store = session_store
+        self.session_history_limit = session_history_limit
         self.metrics = AgentMetrics()
 
     @staticmethod
@@ -88,6 +94,21 @@ class PolicyAgent:
             return "structured_data_then_retrieval"
         return "policy_retrieval"
 
+    def _conversation_context(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+    ) -> str:
+        if self.session_store is None or self.session_history_limit == 0:
+            return ""
+        turns = self.session_store.recent(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            limit=self.session_history_limit,
+        )
+        return "\n".join(f"{turn.role}: {turn.content}" for turn in turns)
+
     def _structured_evidence(
         self,
         *,
@@ -98,11 +119,39 @@ class PolicyAgent:
         if route != "structured_data_then_retrieval" or self.contract_repository is None:
             return []
         self.metrics.structured_data_calls += 1
-        records = self.contract_repository.search(
-            tenant_id=tenant_id,
-            query=query,
-        )
+        with traced_span(
+            "agent.structured_data",
+            {"tenant.id": tenant_id},
+        ):
+            records = self.contract_repository.search(
+                tenant_id=tenant_id,
+                query=query,
+            )
         return [record.as_evidence() for record in records]
+
+    def _persist_turns(
+        self,
+        *,
+        tenant_id: str,
+        session_id: str,
+        query: str,
+        answer: str,
+    ) -> None:
+        if self.session_store is None:
+            return
+        with traced_span("agent.state_persistence", {"tenant.id": tenant_id}):
+            self.session_store.append(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                role="user",
+                content=query,
+            )
+            self.session_store.append(
+                tenant_id=tenant_id,
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+            )
 
     def answer(
         self,
@@ -133,12 +182,20 @@ class PolicyAgent:
             )
 
         try:
-            self.metrics.retrieval_calls += 1
-            matches = self.retriever.search(
+            history = self._conversation_context(
                 tenant_id=tenant_id,
-                query=query,
-                k=self.retrieval_k,
+                session_id=active_session,
             )
+            self.metrics.retrieval_calls += 1
+            with traced_span(
+                "agent.retrieval",
+                {"tenant.id": tenant_id, "retrieval.k": self.retrieval_k},
+            ):
+                matches = self.retriever.search(
+                    tenant_id=tenant_id,
+                    query=query,
+                    k=self.retrieval_k,
+                )
             sources = [
                 Source(
                     document_id=chunk.document_id,
@@ -155,16 +212,34 @@ class PolicyAgent:
                 route=route,
             )
             evidence = structured_evidence + [source.excerpt for source in sources]
-            result = self.model_provider.generate(
-                GenerationRequest(
-                    query=query,
-                    evidence=evidence,
-                    system_instruction=_SYSTEM_INSTRUCTION,
-                    metadata={"tenant_id": tenant_id, "route": route},
+            with traced_span(
+                "agent.model_generation",
+                {
+                    "tenant.id": tenant_id,
+                    "evidence.count": len(evidence),
+                    "agent.route": route,
+                },
+            ):
+                result = self.model_provider.generate(
+                    GenerationRequest(
+                        query=query,
+                        evidence=evidence,
+                        system_instruction=_SYSTEM_INSTRUCTION,
+                        metadata={
+                            "tenant_id": tenant_id,
+                            "route": route,
+                            "conversation_context": history,
+                        },
+                    )
                 )
-            )
             self.metrics.input_tokens += result.input_tokens or 0
             self.metrics.output_tokens += result.output_tokens or 0
+            self._persist_turns(
+                tenant_id=tenant_id,
+                session_id=active_session,
+                query=query,
+                answer=result.text,
+            )
 
             latency = (time.perf_counter() - started) * 1000
             self.metrics.total_latency_ms += latency
@@ -172,6 +247,7 @@ class PolicyAgent:
                 "latency_ms": round(latency, 2),
                 "retrieval_count": len(sources),
                 "structured_record_count": len(structured_evidence),
+                "history_turn_count": len(history.splitlines()) if history else 0,
                 "input_tokens": result.input_tokens,
                 "output_tokens": result.output_tokens,
                 "finish_reason": result.finish_reason,
