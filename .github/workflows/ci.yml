@@ -25,5 +25,12 @@ jobs:
         run: pytest --cov=app --cov-report=term-missing
       - name: Evaluation regression
         run: python -m evaluation.run
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-report
+          path: evaluation/report.json
+          if-no-files-found: warn
       - name: Terraform formatting
         run: terraform fmt -check -recursive infrastructure/terraform
