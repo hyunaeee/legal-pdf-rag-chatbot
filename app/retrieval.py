@@ -30,7 +30,8 @@ class Retriever(Protocol):
         title: str,
         text: str,
         page: int | None = None,
-    ) -> tuple[str, int]: ...
+    ) -> tuple[str, int]:
+        ...
 
     def search(
         self,
@@ -38,9 +39,11 @@ class Retriever(Protocol):
         tenant_id: str,
         query: str,
         k: int,
-    ) -> list[tuple[Chunk, float]]: ...
+    ) -> list[tuple[Chunk, float]]:
+        ...
 
-    def count(self, tenant_id: str | None = None) -> int: ...
+    def count(self, tenant_id: str | None = None) -> int:
+        ...
 
 
 def tokenize(text: str) -> frozenset[str]:
