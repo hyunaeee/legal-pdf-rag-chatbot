@@ -32,11 +32,13 @@ class Settings(BaseSettings):
     google_cloud_location: str = "asia-northeast3"
     vertex_model: str = "gemini-2.5-flash"
 
+    session_store_path: str = ":memory:"
+    session_history_limit: int = Field(default=6, ge=0, le=20)
+    structured_data_path: str = ":memory:"
+
     otel_enabled: bool = False
     otel_service_name: str = "enterprise-policy-agent"
     otel_exporter_otlp_endpoint: str | None = None
-
-    structured_data_path: str = ":memory:"
 
 
 @lru_cache
