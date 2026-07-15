@@ -36,7 +36,7 @@ class AgentMetrics:
 
 
 class PolicyAgent:
-    """A deterministic local orchestration layer with production-oriented seams.
+    """Deterministic orchestration with production-oriented extension points.
 
     The coordinator, retrieval, and reviewer stages are explicit so they can be
     replaced with Google ADK sub-agents without changing the HTTP contract.
@@ -50,16 +50,31 @@ class PolicyAgent:
     @staticmethod
     def _detect_injection(text: str) -> list[str]:
         lowered = text.lower()
-        return ["prompt_injection"] if any(re.search(p, lowered) for p in _INJECTION_PATTERNS) else []
+        matched = any(re.search(pattern, lowered) for pattern in _INJECTION_PATTERNS)
+        return ["prompt_injection"] if matched else []
 
     @staticmethod
     def _route(query: str) -> str:
-        structured_terms = ("상태", "담당", "갱신일", "승인자", "status", "owner", "renewal")
+        structured_terms = (
+            "상태",
+            "담당",
+            "갱신일",
+            "승인자",
+            "status",
+            "owner",
+            "renewal",
+        )
         if any(term in query.lower() for term in structured_terms):
             return "structured_data_then_retrieval"
         return "policy_retrieval"
 
-    def answer(self, *, tenant_id: str, query: str, session_id: str | None) -> ChatResponse:
+    def answer(
+        self,
+        *,
+        tenant_id: str,
+        query: str,
+        session_id: str | None,
+    ) -> ChatResponse:
         started = time.perf_counter()
         self.metrics.requests += 1
         route = self._route(query)
@@ -70,7 +85,10 @@ class PolicyAgent:
             latency = (time.perf_counter() - started) * 1000
             self.metrics.total_latency_ms += latency
             return ChatResponse(
-                answer="보안 정책상 지시사항 우회 또는 시스템 정보 요청은 처리할 수 없습니다.",
+                answer=(
+                    "보안 정책상 지시사항 우회 또는 시스템 정보 요청은 "
+                    "처리할 수 없습니다."
+                ),
                 session_id=active_session,
                 route="safety_review",
                 safety_flags=flags,
@@ -79,7 +97,11 @@ class PolicyAgent:
 
         try:
             self.metrics.retrieval_calls += 1
-            matches = self.retriever.search(tenant_id=tenant_id, query=query, k=self.retrieval_k)
+            matches = self.retriever.search(
+                tenant_id=tenant_id,
+                query=query,
+                k=self.retrieval_k,
+            )
             sources = [
                 Source(
                     document_id=chunk.document_id,
@@ -91,13 +113,17 @@ class PolicyAgent:
                 for chunk, score in matches
             ]
             if not sources:
-                answer = "현재 접근 가능한 문서에서 근거를 찾지 못했습니다. 문서를 추가하거나 질문을 더 구체적으로 작성해 주세요."
+                answer = (
+                    "현재 접근 가능한 문서에서 근거를 찾지 못했습니다. "
+                    "문서를 추가하거나 질문을 더 구체적으로 작성해 주세요."
+                )
             else:
                 evidence = " ".join(source.excerpt for source in sources[:3])
                 answer = (
                     "접근 권한이 있는 문서에서 다음 근거를 확인했습니다. "
                     f"{evidence[:900]}"
-                    "\n\n이 응답은 로컬 검증 모드의 추출형 답변이며, 실제 배포에서는 Vertex AI 생성 모델과 평가 파이프라인을 연결합니다."
+                    "\n\n이 응답은 로컬 검증 모드의 추출형 답변입니다. "
+                    "실제 배포에서는 Vertex AI 생성 모델과 평가 파이프라인을 연결합니다."
                 )
             latency = (time.perf_counter() - started) * 1000
             self.metrics.total_latency_ms += latency
@@ -107,7 +133,10 @@ class PolicyAgent:
                 route=route,
                 sources=sources,
                 safety_flags=flags,
-                metrics={"latency_ms": round(latency, 2), "retrieval_count": len(sources)},
+                metrics={
+                    "latency_ms": round(latency, 2),
+                    "retrieval_count": len(sources),
+                },
             )
         except Exception:
             self.metrics.failures += 1
