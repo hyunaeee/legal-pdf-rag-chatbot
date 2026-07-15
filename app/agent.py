@@ -13,7 +13,6 @@ from app.session_store import SQLiteSessionStore
 from app.structured_data import SQLiteContractRepository
 from app.tracing import traced_span
 
-
 _INJECTION_PATTERNS = (
     r"ignore (all|any|the) previous instructions",
     r"system prompt",
