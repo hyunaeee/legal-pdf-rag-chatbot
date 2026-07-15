@@ -8,6 +8,7 @@ from threading import RLock
 
 
 _TOKEN_RE = re.compile(r"[\w가-힣]+", re.UNICODE)
+_KOREAN_RE = re.compile(r"[가-힣]+")
 
 
 @dataclass(frozen=True)
@@ -21,11 +22,7 @@ class Chunk:
 
 
 class InMemoryRetriever:
-    """Deterministic local retrieval backend used for development and tests.
-
-    The interface is intentionally small so it can later be replaced by Vertex AI
-    Vector Search, AlloyDB, or another enterprise retrieval backend.
-    """
+    """Deterministic tenant-aware retrieval backend for local development and tests."""
 
     def __init__(self) -> None:
         self._chunks: list[Chunk] = []
@@ -33,7 +30,14 @@ class InMemoryRetriever:
 
     @staticmethod
     def _tokenize(text: str) -> frozenset[str]:
-        return frozenset(token.lower() for token in _TOKEN_RE.findall(text))
+        tokens = {token.lower() for token in _TOKEN_RE.findall(text)}
+        for korean_word in _KOREAN_RE.findall(text):
+            for width in (2, 3):
+                tokens.update(
+                    korean_word[index : index + width]
+                    for index in range(max(0, len(korean_word) - width + 1))
+                )
+        return frozenset(tokens)
 
     @staticmethod
     def _chunk_text(text: str, size: int = 900, overlap: int = 120) -> list[str]:
@@ -50,7 +54,14 @@ class InMemoryRetriever:
             start = max(start + 1, end - overlap)
         return chunks
 
-    def ingest(self, *, tenant_id: str, title: str, text: str, page: int | None = None) -> tuple[str, int]:
+    def ingest(
+        self,
+        *,
+        tenant_id: str,
+        title: str,
+        text: str,
+        page: int | None = None,
+    ) -> tuple[str, int]:
         digest = hashlib.sha256(f"{tenant_id}:{title}:{text}".encode()).hexdigest()[:16]
         new_chunks = [
             Chunk(
