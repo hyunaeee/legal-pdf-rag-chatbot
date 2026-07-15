@@ -10,7 +10,12 @@ RUN addgroup --system app && adduser --system --ingroup app app
 
 COPY pyproject.toml README.md ./
 COPY app ./app
-RUN pip install --upgrade pip && pip install .
+COPY agents ./agents
+COPY mcp_server ./mcp_server
+RUN pip install --upgrade pip \
+    && pip install '.[ai,observability]' \
+    && mkdir -p /app/data/chroma /app/data/policies \
+    && chown -R app:app /app/data
 
 USER app
 EXPOSE 8080
