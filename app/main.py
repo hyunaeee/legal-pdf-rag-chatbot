@@ -16,6 +16,7 @@ from pypdf import PdfReader
 
 from app.agent import PolicyAgent
 from app.models import create_model_provider
+from app.observability import configure_observability
 from app.retrieval import InMemoryRetriever
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, IngestResponse
 from app.settings import Settings, get_settings
@@ -35,9 +36,10 @@ agent = PolicyAgent(
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",
+    version="0.5.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
+observability_enabled = configure_observability(app, settings)
 
 
 def tenant_id(
@@ -136,4 +138,5 @@ def metrics() -> dict[str, object]:
         "agent": agent.metrics.snapshot(),
         "indexed_chunks": retriever.count(),
         "model_provider": model_provider.name,
+        "observability_enabled": observability_enabled,
     }
