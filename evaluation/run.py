@@ -10,7 +10,6 @@ from app.retrieval import InMemoryRetriever
 from app.session_store import SQLiteSessionStore
 from app.structured_data import ContractRecord, SQLiteContractRepository
 
-
 Case = dict[str, Any]
 
 
