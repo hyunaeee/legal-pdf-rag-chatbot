@@ -36,11 +36,13 @@ agent = PolicyAgent(
     contract_repository=contract_repository,
     session_store=session_store,
     session_history_limit=settings.session_history_limit,
+    input_cost_per_million_usd=settings.input_cost_per_million_usd,
+    output_cost_per_million_usd=settings.output_cost_per_million_usd,
 )
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.7.0",
+    version="0.8.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
 observability_enabled = configure_observability(app, settings)
