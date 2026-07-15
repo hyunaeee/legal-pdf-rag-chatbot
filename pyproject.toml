@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "enterprise-policy-agent"
-version = "0.4.0"
+version = "0.6.0"
 description = "Production-oriented policy and compliance RAG service"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,11 +22,8 @@ dependencies = [
 ai = [
   "google-adk>=2.0,<3",
   "google-genai>=1.0,<2",
-  "google-cloud-aiplatform>=1.71,<2",
   "mcp>=1.0,<2",
-  "langchain>=0.3,<1",
-  "langchain-chroma>=0.2,<1",
-  "langchain-upstage>=0.6,<1",
+  "chromadb>=1.0,<2",
 ]
 observability = [
   "opentelemetry-api>=1.27,<2",
@@ -34,6 +31,11 @@ observability = [
   "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
   "opentelemetry-instrumentation-logging>=0.48b0,<1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.27,<2",
+]
+legacy = [
+  "langchain>=0.3,<1",
+  "langchain-chroma>=0.2,<1",
+  "langchain-upstage>=0.6,<1",
 ]
 dev = [
   "pytest>=8,<9",
