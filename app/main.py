@@ -3,7 +3,15 @@ from __future__ import annotations
 import io
 import logging
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from pypdf import PdfReader
 
 from app.agent import PolicyAgent
@@ -51,16 +59,30 @@ async def ingest_document(
     config: Settings = Depends(get_settings),
 ) -> IngestResponse:
     if file.content_type != "application/pdf":
-        raise HTTPException(status_code=415, detail="Only application/pdf uploads are accepted.")
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only application/pdf uploads are accepted.",
+        )
+
     payload = await file.read()
     if len(payload) > config.max_upload_mb * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Uploaded PDF exceeds the configured limit.")
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Uploaded PDF exceeds the configured limit.",
+        )
+
     try:
         reader = PdfReader(io.BytesIO(payload))
-        pages = [(index + 1, page.extract_text() or "") for index, page in enumerate(reader.pages)]
+        pages = [
+            (index + 1, page.extract_text() or "")
+            for index, page in enumerate(reader.pages)
+        ]
     except Exception as exc:
         logger.warning("PDF parsing failed", exc_info=exc)
-        raise HTTPException(status_code=422, detail="The uploaded PDF could not be parsed.") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The uploaded PDF could not be parsed.",
+        ) from exc
 
     document_id = ""
     chunk_count = 0
@@ -75,8 +97,13 @@ async def ingest_document(
             page=page_number,
         )
         chunk_count += created
+
     if not chunk_count:
-        raise HTTPException(status_code=422, detail="The PDF does not contain extractable text.")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="The PDF does not contain extractable text.",
+        )
+
     return IngestResponse(
         document_id=document_id,
         title=title,
