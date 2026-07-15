@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Protocol
 
-
 _TOKEN_RE = re.compile(r"[\w가-힣]+", re.UNICODE)
 _KOREAN_RE = re.compile(r"[가-힣]+")
 
