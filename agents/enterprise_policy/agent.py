@@ -10,7 +10,6 @@ from agents.enterprise_policy.tools import (
     search_policy_documents,
 )
 
-
 MODEL = os.getenv("EPA_ADK_MODEL", "gemini-2.5-flash")
 
 policy_retrieval_agent = Agent(
