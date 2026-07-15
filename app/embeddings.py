@@ -10,9 +10,11 @@ from app.retrieval import tokenize
 class EmbeddingProvider(Protocol):
     name: str
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        ...
 
-    def embed_query(self, text: str) -> list[float]: ...
+    def embed_query(self, text: str) -> list[float]:
+        ...
 
 
 class HashEmbeddingProvider:
