@@ -20,15 +20,15 @@ jobs:
       - name: Lint
         shell: bash
         run: |
-          ruff check app agents mcp_server tests evaluation --fix
-          git diff -- app agents mcp_server tests evaluation | tee lint-fixes.patch
-          test ! -s lint-fixes.patch
-      - name: Upload lint fix patch
+          set -o pipefail
+          ruff check app agents mcp_server tests evaluation --output-format=concise \
+            | tee lint-report.txt
+      - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lint-fixes
-          path: lint-fixes.patch
+          name: lint-report
+          path: lint-report.txt
           if-no-files-found: warn
       - name: Compile optional integration modules
         run: python -m compileall -q app agents mcp_server
