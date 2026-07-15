@@ -55,10 +55,20 @@ class VertexGeminiProvider:
             f"[Evidence {index}] {text}"
             for index, text in enumerate(request.evidence, start=1)
         )
+        history = request.metadata.get("conversation_context", "").strip()
+        history_section = ""
+        if history:
+            history_section = (
+                "\n\nConversation context (for resolving references only; "
+                "the evidence remains authoritative):\n"
+                f"{history}"
+            )
+
         prompt = (
             "Answer the user using only the supplied evidence. "
             "If the evidence is insufficient, explicitly say so. "
-            "Preserve policy dates, quantities, and exceptions exactly.\n\n"
+            "Preserve policy dates, quantities, and exceptions exactly."
+            f"{history_section}\n\n"
             f"User question:\n{request.query}\n\n"
             f"Evidence:\n{evidence}"
         )
