@@ -33,7 +33,14 @@ jobs:
       - name: Compile optional integration modules
         run: python -m compileall -q app agents mcp_server
       - name: Test
-        run: pytest --cov=app --cov-report=term-missing
+        run: pytest --cov=app --cov-report=term-missing --junitxml=pytest-report.xml
+      - name: Upload pytest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+          if-no-files-found: warn
       - name: Evaluation regression
         run: python -m evaluation.run
       - name: Upload evaluation report
