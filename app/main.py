@@ -17,14 +17,14 @@ from pypdf import PdfReader
 from app.agent import PolicyAgent
 from app.models import create_model_provider
 from app.observability import configure_observability
-from app.retrieval import InMemoryRetriever
+from app.retriever_factory import create_retriever
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, IngestResponse
 from app.settings import Settings, get_settings
 from app.structured_data import SQLiteContractRepository
 
 logger = logging.getLogger(__name__)
-retriever = InMemoryRetriever()
 settings = get_settings()
+retriever = create_retriever(settings)
 model_provider = create_model_provider(settings)
 contract_repository = SQLiteContractRepository(settings.structured_data_path)
 agent = PolicyAgent(
@@ -36,7 +36,7 @@ agent = PolicyAgent(
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
 observability_enabled = configure_observability(app, settings)
@@ -137,6 +137,8 @@ def metrics() -> dict[str, object]:
     return {
         "agent": agent.metrics.snapshot(),
         "indexed_chunks": retriever.count(),
+        "retrieval_backend": settings.retrieval_backend,
+        "embedding_backend": settings.embedding_backend,
         "model_provider": model_provider.name,
         "observability_enabled": observability_enabled,
     }
