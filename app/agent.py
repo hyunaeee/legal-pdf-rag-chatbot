@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from app.models.base import GenerationRequest, ModelProvider
 from app.models.local import LocalExtractiveProvider
-from app.retrieval import InMemoryRetriever
+from app.retrieval import Retriever
 from app.schemas import ChatResponse, Source
 from app.structured_data import SQLiteContractRepository
 
@@ -54,7 +54,7 @@ class PolicyAgent:
 
     def __init__(
         self,
-        retriever: InMemoryRetriever,
+        retriever: Retriever,
         retrieval_k: int = 5,
         model_provider: ModelProvider | None = None,
         contract_repository: SQLiteContractRepository | None = None,
