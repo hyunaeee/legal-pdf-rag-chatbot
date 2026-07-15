@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     model_backend: str = "local"
     model_temperature: float = Field(default=0.1, ge=0, le=2)
     max_output_tokens: int = Field(default=1024, ge=64, le=8192)
+    input_cost_per_million_usd: float = Field(default=0.0, ge=0)
+    output_cost_per_million_usd: float = Field(default=0.0, ge=0)
     google_cloud_project: str | None = None
     google_cloud_location: str = "asia-northeast3"
     vertex_model: str = "gemini-2.5-flash"
