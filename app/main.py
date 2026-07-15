@@ -19,6 +19,7 @@ from app.models import create_model_provider
 from app.observability import configure_observability
 from app.retriever_factory import create_retriever
 from app.schemas import ChatRequest, ChatResponse, HealthResponse, IngestResponse
+from app.session_store import SQLiteSessionStore
 from app.settings import Settings, get_settings
 from app.structured_data import SQLiteContractRepository
 
@@ -27,16 +28,19 @@ settings = get_settings()
 retriever = create_retriever(settings)
 model_provider = create_model_provider(settings)
 contract_repository = SQLiteContractRepository(settings.structured_data_path)
+session_store = SQLiteSessionStore(settings.session_store_path)
 agent = PolicyAgent(
     retriever=retriever,
     retrieval_k=settings.retrieval_k,
     model_provider=model_provider,
     contract_repository=contract_repository,
+    session_store=session_store,
+    session_history_limit=settings.session_history_limit,
 )
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.6.0",
+    version="0.7.0",
     description="Tenant-aware policy RAG and agent orchestration service.",
 )
 observability_enabled = configure_observability(app, settings)
@@ -130,6 +134,15 @@ def chat(request: ChatRequest, tenant: str = Depends(tenant_id)) -> ChatResponse
         query=request.query,
         session_id=request.session_id,
     )
+
+
+@app.delete("/v1/sessions/{session_id}", tags=["sessions"])
+def delete_session(
+    session_id: str,
+    tenant: str = Depends(tenant_id),
+) -> dict[str, int | str]:
+    deleted = session_store.delete(tenant_id=tenant, session_id=session_id)
+    return {"session_id": session_id, "deleted_turns": deleted}
 
 
 @app.get("/metrics", tags=["operations"])
