@@ -1,0 +1,9 @@
+project_id      = "your-google-cloud-project"
+region          = "asia-northeast3"
+container_image = "asia-northeast3-docker.pkg.dev/your-google-cloud-project/enterprise-ai/enterprise-policy-agent:latest"
+
+allow_unauthenticated = false
+otel_enabled          = false
+otel_endpoint         = ""
+min_instances         = 0
+max_instances         = 5

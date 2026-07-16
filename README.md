@@ -1,130 +1,293 @@
-# Legal PDF RAG Chatbot 📚⚖️
+# Enterprise Policy Agent
 
-법률 관련 PDF 문서를 분석하고 질문에 답변해주는 RAG(Retrieval-Augmented Generation) 기반 챗봇입니다.
+An individual, end-to-end Generative AI engineering portfolio that evolves a Streamlit legal-PDF RAG prototype into a tenant-aware enterprise policy and contract assistant.
 
-## 🌟 주요 기능
+The repository is designed around the responsibilities of a Forward Deployed Engineer: discover a business workflow, connect structured and unstructured data, build the application and cloud integration layers, add safety and observability, and leave behind testable deployment artifacts.
 
-- **PDF 문서 업로드**: 법률 관련 PDF 파일을 업로드하여 분석
-- ![image](https://github.com/user-attachments/assets/fdcb1085-cf0b-4e1f-95e3-9b414d0e3626)
-- **지능형 검색**: 업로드된 문서에서 관련 내용을 정확하게 검색
-- **문맥 인식**: 이전 대화 내용을 고려한 답변 생성
-- **증거 제시**: 답변과 함께 참고한 문서 부분을 제공
-- ![image](https://github.com/user-attachments/assets/6b900f73-1277-4c3f-b62c-58ab8affb574)
-- **대화형 인터페이스**: Streamlit 기반의 사용자 친화적인 웹 인터페이스
-- ![image](https://github.com/user-attachments/assets/8a587818-e118-454c-86eb-ea1b4d503cec)
+## Current status
 
+The project runs without cloud credentials in deterministic local mode and includes production adapters for Google Cloud. The code does **not** claim a live customer deployment or publish fabricated cloud latency, quality, cost, or ROI numbers. Those measurements require a configured GCP project, representative data, and real traffic.
 
+## Implemented capabilities
 
-## 🛠️ 기술 스택
+| Area | Implementation |
+|---|---|
+| API | FastAPI health, PDF ingestion, chat, metrics, and session-deletion endpoints |
+| Unstructured data | PDF parsing, chunking, Korean n-gram retrieval, citations, and abstention |
+| Vector storage | In-memory deterministic backend and persistent Chroma adapter |
+| Embeddings | Local deterministic hash embeddings and Vertex AI embedding adapter |
+| Generation | Local extractive provider and Vertex AI Gemini provider via Google Gen AI SDK |
+| Agentic workflow | Google ADK coordinator with policy, contract, and compliance-review sub-agents |
+| Structured data | Tenant-scoped SQLite contract repository |
+| MCP | Read-only contract-status MCP server with runtime-bound tenant context |
+| State | Tenant/session-scoped conversation persistence, bounded context, and deletion |
+| Security | Pre-generation tenant filtering, upload validation, prompt-injection route, read-only tools |
+| Observability | FastAPI OpenTelemetry instrumentation and granular agent spans |
+| LLM metrics | Latency, input/output tokens, tokens per second, and configurable cost estimate |
+| Evaluation | 12 deterministic regression cases with category-level JSON report |
+| Delivery | Docker, GitHub Actions, Terraform, Artifact Registry, private Cloud Run, least-privilege runtime account |
 
-- **Frontend**: Streamlit
-- **LLM**: Upstage Solar API
-- **Vector Database**: Chroma
-- **Embeddings**: Upstage Solar Embedding
-- **Framework**: LangChain
-- **Document Processing**: PyPDF
+## Architecture
 
-## 📋 필요 조건
+```text
+Authenticated client
+        |
+        v
+FastAPI service on Cloud Run
+        |
+        +--> tenant authorization boundary
+        |
+        +--> coordinator
+        |      +--> policy retrieval
+        |      |      +--> memory or persistent Chroma
+        |      |      +--> local hash or Vertex embeddings
+        |      |
+        |      +--> structured contract lookup
+        |      |      +--> SQLite demo adapter / managed DB replacement seam
+        |      |
+        |      +--> compliance and safety review
+        |
+        +--> local extractive model or Vertex AI Gemini
+        |
+        +--> tenant/session-scoped state
+        |
+        +--> OpenTelemetry traces, logs, and metrics
+```
 
-- Python 3.8+
-- Upstage API Key
+A standalone Google ADK implementation is available in `agents/enterprise_policy`. It contains:
 
-## ⚙️ 설치 및 설정
+- `enterprise_policy_coordinator`
+- `policy_retrieval_agent`
+- `contract_workflow_agent`
+- `compliance_reviewer_agent`
 
-### 1. 저장소 클론
+See [`docs/architecture.md`](docs/architecture.md) for component boundaries and trade-offs.
+
+## Request lifecycle
+
+1. The API validates the tenant namespace and request shape.
+2. The safety stage blocks known instruction-override and system-prompt requests.
+3. The coordinator selects policy retrieval or structured-data-plus-retrieval.
+4. Retrieval filters by tenant before evidence reaches a model.
+5. Structured contract records are queried through a tenant-scoped repository.
+6. Bounded conversation context is loaded using the tenant and session composite key.
+7. The configured model provider generates an evidence-constrained answer.
+8. Sources, route, safety flags, token metrics, throughput, and optional cost estimate are returned.
+9. User and assistant turns are stored for the active tenant/session.
+10. OpenTelemetry spans record stage timing without attaching full document text.
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Runtime health and model backend |
+| `POST /v1/documents` | Validate and ingest a tenant-scoped PDF |
+| `POST /v1/chat` | Route, retrieve, generate, and return cited evidence |
+| `DELETE /v1/sessions/{session_id}` | Delete conversation turns for one tenant/session |
+| `GET /metrics` | Request, failure, latency, retrieval, token, and estimated-cost counters |
+
+Except for `/health`, the local API requires `X-Tenant-ID`. This demonstrates namespace isolation, but the header is not authentication. A production edge must map an authenticated principal to an allowed tenant.
+
+## Local setup
+
 ```bash
-git clone https://github.com/your-username/legal-pdf-rag-chatbot.git
+git clone https://github.com/hyunaeee/legal-pdf-rag-chatbot.git
 cd legal-pdf-rag-chatbot
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e '.[dev]'
+cp .env.example .env
+uvicorn app.main:app --reload
 ```
 
-### 2. 가상환경 생성 및 활성화
+Open `http://localhost:8000/docs` for the generated API documentation.
+
+### Local deterministic mode
+
+The default configuration needs no model credentials:
+
+```dotenv
+EPA_MODEL_BACKEND=local
+EPA_RETRIEVAL_BACKEND=memory
+EPA_EMBEDDING_BACKEND=hash
+EPA_SESSION_STORE_PATH=:memory:
+EPA_STRUCTURED_DATA_PATH=:memory:
+```
+
+This mode is used by CI so regression behavior is repeatable.
+
+## Vertex AI mode
+
+Install the AI integrations and authenticate with Application Default Credentials:
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -e '.[ai]'
+gcloud auth application-default login
 ```
 
-### 3. 패키지 설치
+```dotenv
+EPA_MODEL_BACKEND=vertex
+EPA_GOOGLE_CLOUD_PROJECT=your-project-id
+EPA_GOOGLE_CLOUD_LOCATION=asia-northeast3
+EPA_VERTEX_MODEL=gemini-2.5-flash
+```
+
+The provider records model-reported input/output token counts when available.
+
+## Persistent vector mode
+
+```dotenv
+EPA_RETRIEVAL_BACKEND=chroma
+EPA_VECTOR_STORE_PATH=data/chroma
+EPA_EMBEDDING_BACKEND=hash
+```
+
+To use Vertex embeddings:
+
+```dotenv
+EPA_EMBEDDING_BACKEND=vertex
+EPA_VERTEX_EMBEDDING_MODEL=gemini-embedding-001
+EPA_GOOGLE_CLOUD_PROJECT=your-project-id
+```
+
+Every Chroma query includes a tenant metadata filter before results are returned.
+
+## Google ADK multi-agent application
+
 ```bash
-pip install -r requirements.txt
+pip install -e '.[ai]'
+export EPA_ADK_TENANT_ID=demo
+export EPA_POLICY_DIRECTORY=data/policies
+adk web agents
 ```
 
-### 4. 환경 변수 설정
-`.env` 파일을 생성하고 다음 내용을 추가하세요:
-```
-UPSTAGE_API_KEY=your_upstage_api_key_here
-```
+The runtime supplies the tenant binding. Tenant selection is intentionally not exposed as a model tool argument.
 
-## 🚀 실행 방법
+## MCP contract tool
 
 ```bash
-streamlit run main.py
+pip install -e '.[ai]'
+export EPA_MCP_TENANT_ID=demo
+export EPA_STRUCTURED_DATA_PATH=data/contracts.db
+python -m mcp_server.server
 ```
 
-브라우저에서 `http://localhost:8501`로 접속하여 애플리케이션을 사용할 수 있습니다.
+The MCP server exposes a read-only `get_contract_status` tool. Write operations are intentionally excluded.
 
-## 📖 사용법
+## OpenTelemetry
 
-1. **PDF 업로드**: 사이드바에서 법률 관련 PDF 파일을 업로드합니다.
-2. **문서 처리 대기**: 업로드된 문서가 인덱싱될 때까지 잠시 기다립니다.
-3. **질문하기**: 채팅창에 문서와 관련된 질문을 입력합니다.
-4. **답변 확인**: AI가 문서를 바탕으로 답변하며, 참고한 증거도 함께 제공됩니다.
-
-## 📂 프로젝트 구조
-
-```
-legal-pdf-rag-chatbot/
-├── main.py                 # 메인 애플리케이션
-├── chat_model.py          # 채팅 모델 및 RAG 체인 설정
-├── document_loader.py     # PDF 문서 로딩
-├── embedding.py           # 벡터 저장소 생성
-├── ui_components.py       # UI 컴포넌트
-├── config.py             # 설정 파일
-├── requirements.txt      # 패키지 의존성
-├── .env                  # 환경 변수 (생성 필요)
-└── README.md            # 프로젝트 설명서
+```bash
+pip install -e '.[observability]'
 ```
 
-## ⚡ 주요 특징
-
-### 지능형 문맥 인식
-- 이전 대화 내용을 고려하여 더 정확한 답변 제공
-- 대화 히스토리 기반 질문 재구성
-
-### 효율적인 메모리 관리
-- 일정 개수 이상의 메시지 자동 삭제로 메모리 최적화
-- 파일별 캐싱으로 재처리 시간 단축
-
-### 사용자 친화적 인터페이스
-- 직관적인 Streamlit 기반 웹 인터페이스
-- 실시간 타이핑 효과로 자연스러운 대화 경험
-- 증거 문서 확장 가능한 뷰
-
-## 🔧 설정 옵션
-
-`config.py`에서 다음 설정을 조정할 수 있습니다:
-
-- `MAX_MESSAGES_BEFORE_DELETION`: 메모리 관리를 위한 최대 메시지 수 (기본값: 4)
-
-## 📝 요구사항 파일 (requirements.txt)
-
-```
-streamlit
-langchain
-langchain-community
-langchain-chroma
-langchain-upstage
-pypdf
-python-dotenv
+```dotenv
+EPA_OTEL_ENABLED=true
+EPA_OTEL_SERVICE_NAME=enterprise-policy-agent
+EPA_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```
 
-## 🤝 기여하기
+Instrumented stages include:
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- FastAPI request handling
+- retrieval
+- structured-data lookup
+- model generation
+- state persistence
 
----
+Trace attributes contain routing and count information rather than full prompts or retrieved documents.
 
-**⚠️ 주의사항**: 이 도구는 법률 자문을 대체하지 않습니다. 중요한 법적 결정을 내리기 전에 반드시 전문 변호사와 상담하시기 바랍니다.
+## Token throughput and cost metrics
+
+The application reports token counts from the model provider and calculates `tokens_per_second` when output-token metadata is available.
+
+Current model prices are deliberately not hardcoded. Supply the rates that apply to the selected model and billing context:
+
+```dotenv
+EPA_INPUT_COST_PER_MILLION_USD=0
+EPA_OUTPUT_COST_PER_MILLION_USD=0
+```
+
+When both values remain zero, `estimated_cost_usd` is returned as `null` rather than presenting a misleading estimate.
+
+## Tests and evaluation
+
+```bash
+ruff check app agents mcp_server tests evaluation
+pytest --cov=app --cov-report=term-missing
+python -m evaluation.run
+```
+
+The deterministic suite covers:
+
+- grounded policy answers
+- Korean retrieval variants
+- abstention when evidence is unavailable
+- English and Korean prompt injection
+- document, structured-data, and session tenant isolation
+- structured-data routing
+- bounded conversation history
+
+The runner writes `evaluation/report.json`. GitHub Actions publishes it as the `evaluation-report` artifact and fails the pull request when a case regresses.
+
+See [`docs/evaluation.md`](docs/evaluation.md) for the production evaluation plan, including retrieval, trajectory, answer-quality, latency, token, cost, and human-review metrics.
+
+## Docker
+
+The production image installs the Vertex, ADK, MCP, Chroma, and OpenTelemetry integrations and runs as a non-root user.
+
+```bash
+docker build -t enterprise-policy-agent .
+docker run --rm -p 8080:8080 enterprise-policy-agent
+```
+
+## Google Cloud deployment
+
+Terraform provisions:
+
+- required Google Cloud APIs
+- Artifact Registry
+- a dedicated runtime service account
+- Vertex AI and telemetry IAM roles
+- a private Cloud Run v2 service
+- health probes and bounded autoscaling
+- optional public invocation only when explicitly enabled
+
+See [`infrastructure/terraform/README.md`](infrastructure/terraform/README.md).
+
+## Engineering documents
+
+- [`docs/architecture.md`](docs/architecture.md): system boundaries and trade-offs
+- [`docs/evaluation.md`](docs/evaluation.md): deterministic and production evaluation strategy
+- [`docs/threat-model.md`](docs/threat-model.md): threats, controls, and residual risks
+- [`docs/incident-report.md`](docs/incident-report.md): simulated stale-policy retrieval incident
+- [`docs/customer-discovery.md`](docs/customer-discovery.md): fictional FDE discovery and ROI measurement plan
+
+## Individual ownership
+
+This repository is structured as an individual portfolio project. Its evidence of ownership includes application code, cloud adapters, agent and tool design, tests, evaluation cases, threat modeling, infrastructure-as-code, CI, incident analysis, and customer-discovery documentation in one repository.
+
+The implementation keeps interfaces replaceable so each design choice can be explained independently:
+
+- model provider
+- embedding provider
+- retriever
+- structured-data repository
+- session store
+- observability exporter
+
+## Original prototype
+
+The repository began as a Streamlit PDF chatbot using LangChain, Chroma, Upstage Solar, and PyPDF. The original files remain for comparison, showing the progression from a learning prototype to a service-oriented enterprise architecture.
+
+## Remaining production work
+
+- Deploy into an authorized GCP project and publish measured p50/p95 latency, quality, token, and billed-cost results.
+- Replace caller-supplied tenant headers with identity-derived authorization.
+- Replace local SQLite state and contract storage with a managed durable service.
+- Add policy version/effective-date metadata and stale-document regression cases.
+- Run load, failure-injection, and recovery tests.
+- Conduct domain-expert evaluation and a real user-adoption pilot.
+
+## Safety
+
+This project is an engineering portfolio and does not provide legal advice. Production use requires organization-specific identity, authorization, privacy, retention, data-residency, incident-response, and human-review policies.
