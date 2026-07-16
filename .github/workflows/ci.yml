@@ -9,12 +9,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
       - name: Install
         run: pip install -e '.[dev]'
       - name: Lint
@@ -25,7 +25,7 @@ jobs:
             | tee lint-report.txt
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: lint-report
           path: lint-report.txt
@@ -36,7 +36,7 @@ jobs:
         run: pytest --cov=app --cov-report=term-missing --junitxml=pytest-report.xml
       - name: Upload pytest report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pytest-report
           path: pytest-report.xml
@@ -45,7 +45,7 @@ jobs:
         run: python -m evaluation.run
       - name: Upload evaluation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: evaluation-report
           path: evaluation/report.json
